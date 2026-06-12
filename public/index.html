@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOXEL CUP — Online Blocky Football</title>
+<style>
+  :root {
+    --bg: #0e1118;
+    --panel: #161b24;
+    --panel2: #1d242f;
+    --border: #28303d;
+    --text: #e7ecf3;
+    --muted: #8b96a5;
+    --lime: #a3e635;
+    --lime-dark: #4d7c0f;
+    --gold: #fbbf24;
+    --silver: #cbd5e1;
+    --bronze: #d97706;
+    --red: #f87171;
+    --blue: #60a5fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text); overflow-x: hidden;
+    font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+  }
+  canvas.game3d { display: block; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* Dekorasi latar: glow + lingkaran tengah lapangan */
+  #bg-deco { position: fixed; inset: 0; z-index: -1; overflow: hidden; }
+  #bg-deco::before {
+    content: ''; position: absolute; left: 50%; top: 100%;
+    width: 1400px; height: 1400px; transform: translate(-50%, -28%);
+    background: radial-gradient(circle, rgba(101, 163, 13, 0.16) 0%, rgba(163, 230, 53, 0.05) 35%, transparent 65%);
+  }
+  #bg-deco::after {
+    content: ''; position: absolute; left: 50%; top: 100%;
+    width: 900px; height: 900px; transform: translate(-50%, -32%);
+    border: 2px solid rgba(163, 230, 53, 0.09); border-radius: 50%;
+  }
+
+  .screen { display: none; }
+  .screen.show { display: block; }
+
+  /* ---------- HEADER ---------- */
+  #topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 28px; max-width: 1080px; margin: 0 auto;
+  }
+  #topbar .logo {
+    font-size: 19px; font-weight: 900; font-style: italic; letter-spacing: 0.5px;
+  }
+  #topbar .logo .cup { color: var(--lime); }
+  #badge-online {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+    padding: 8px 16px; font-size: 12px; font-weight: 600; color: var(--muted);
+  }
+  #badge-online .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--lime);
+    box-shadow: 0 0 8px var(--lime); animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+  #badge-online b { color: var(--text); }
+
+  /* ---------- HOME ---------- */
+  #screen-home { max-width: 1080px; margin: 0 auto; padding: 10px 28px 90px; }
+  .hero { text-align: center; margin: 26px 0 38px; }
+  .hero h1 {
+    font-size: clamp(48px, 8vw, 76px); font-weight: 900; font-style: italic;
+    letter-spacing: -2px; line-height: 1; transform: skewX(-6deg);
+  }
+  .hero h1 .cup {
+    background: linear-gradient(180deg, var(--lime), #5fa314);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p {
+    margin-top: 12px; font-size: 13px; letter-spacing: 5px; color: var(--muted); font-weight: 600;
+  }
+  .hero p b { color: var(--lime); font-weight: 600; }
+
+  /* ---------- BUILDER ---------- */
+  .builder {
+    display: grid; grid-template-columns: 330px 1fr; gap: 0;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
+    overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+  }
+  @media (max-width: 860px) { .builder { grid-template-columns: 1fr; } }
+
+  .builder-left {
+    background: linear-gradient(180deg, #1a212c 0%, #141a23 100%);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center; padding: 22px 20px 24px;
+  }
+  #avatar-view { width: 280px; height: 300px; position: relative; }
+  #avatar-view::after {
+    content: ''; position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+    width: 150px; height: 26px; border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(163,230,53,0.18), transparent 70%);
+  }
+  .skin-nav { display: flex; align-items: center; gap: 14px; margin-top: 2px; width: 100%; justify-content: center; }
+  .skin-nav button {
+    width: 42px; height: 42px; border-radius: 12px; font-size: 19px; font-weight: 900;
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    transition: all 0.12s;
+  }
+  .skin-nav button:hover { border-color: var(--lime); color: var(--lime); }
+  .skin-mid { text-align: center; min-width: 170px; }
+  #skin-name { font-size: 17px; font-weight: 900; font-style: italic; letter-spacing: 0.5px; }
+  #skin-tag {
+    display: inline-block; margin-top: 6px; font-size: 10px; font-weight: 700; letter-spacing: 2px;
+    color: var(--lime); border: 1px solid var(--lime-dark); border-radius: 999px; padding: 3px 12px;
+  }
+  #skin-desc { margin-top: 10px; font-size: 12px; color: var(--muted); min-height: 18px; }
+  #skin-count { margin-top: 10px; font-size: 10px; letter-spacing: 3px; color: var(--muted); }
+
+  .builder-right { padding: 30px 32px; display: flex; flex-direction: column; }
+  .builder-right h2 {
+    font-size: 14px; font-weight: 800; letter-spacing: 3px; color: var(--muted); margin-bottom: 18px;
+  }
+  label.fld { display: block; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: var(--muted); margin-bottom: 8px; }
+  #name-input {
+    width: 100%; background: #10141b; border: 1px solid var(--border); border-radius: 12px;
+    color: var(--text); font-family: inherit; font-size: 16px; font-weight: 600;
+    padding: 13px 16px; outline: none; transition: border-color 0.12s;
+  }
+  #name-input:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(163,230,53,0.12); }
+  #my-stats { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 16px; }
+
+  .mode-row { display: flex; gap: 8px; margin-bottom: 18px; }
+  .mode-btn {
+    flex: 1; padding: 12px 8px; border-radius: 12px; font-size: 12px; font-weight: 800;
+    letter-spacing: 1px; background: var(--panel2); border: 1px solid var(--border);
+    color: var(--muted); transition: all 0.12s;
+  }
+  .mode-btn:hover { border-color: var(--lime-dark); }
+  .mode-btn.selected { border-color: var(--lime); color: var(--lime); background: rgba(163, 230, 53, 0.08); }
+
+  .play-row { display: flex; gap: 12px; margin-top: 22px; flex-wrap: wrap; }
+  #btn-queue {
+    flex: 2; min-width: 200px; padding: 17px 10px; border: none; border-radius: 14px;
+    font-size: 16px; font-weight: 900; font-style: italic; letter-spacing: 2px;
+    background: linear-gradient(180deg, var(--lime), #84cc16); color: #16240a;
+    box-shadow: 0 6px 20px rgba(163, 230, 53, 0.25), inset 0 -3px 0 rgba(0,0,0,0.18);
+    transition: transform 0.08s;
+  }
+  #btn-queue:hover { transform: translateY(-2px); }
+  #btn-bots {
+    flex: 1; min-width: 130px; padding: 17px 10px; border-radius: 14px;
+    font-size: 13px; font-weight: 700; letter-spacing: 1px;
+    background: transparent; border: 1px solid var(--border); color: var(--text);
+    transition: border-color 0.12s;
+  }
+  #btn-bots:hover:not(:disabled) { border-color: var(--lime); color: var(--lime); }
+  #btn-bots:disabled { opacity: 0.4; cursor: default; }
+  #btn-unqueue {
+    flex: 2; min-width: 200px; padding: 17px 10px; border-radius: 14px;
+    font-size: 14px; font-weight: 800; letter-spacing: 2px;
+    background: transparent; border: 1px solid var(--red); color: var(--red); display: none;
+  }
+  #queue-status { font-size: 12px; color: var(--gold); margin-top: 14px; min-height: 17px; font-weight: 600; }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 22px; }
+  .chip {
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--muted);
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 999px; padding: 6px 13px;
+  }
+  .chip b { color: var(--lime); }
+
+  /* ---------- LEADERBOARD ---------- */
+  .lb-section { margin-top: 46px; }
+  .lb-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
+  .lb-head h2 { font-size: 22px; font-weight: 900; font-style: italic; letter-spacing: 0.5px; }
+  .lb-head span { font-size: 11px; letter-spacing: 2px; color: var(--muted); font-weight: 600; }
+
+  #podium { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: end; }
+  .pod {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    text-align: center; padding: 18px 10px 16px; position: relative;
+  }
+  .pod .medal {
+    width: 34px; height: 34px; border-radius: 50%; margin: 0 auto 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-style: italic; font-size: 16px; color: #16240a;
+  }
+  .pod.p1 { padding-top: 26px; padding-bottom: 24px; border-color: rgba(251, 191, 36, 0.45); order: 2; }
+  .pod.p2 { order: 1; }
+  .pod.p3 { order: 3; }
+  .pod.p1 .medal { background: var(--gold); box-shadow: 0 0 18px rgba(251,191,36,0.4); }
+  .pod.p2 .medal { background: var(--silver); }
+  .pod.p3 .medal { background: var(--bronze); }
+  .pod .pname { font-weight: 800; font-size: 15px; }
+  .pod .ppts { color: var(--lime); font-weight: 900; font-size: 20px; font-style: italic; margin-top: 4px; }
+  .pod .prec { color: var(--muted); font-size: 10.5px; margin-top: 6px; letter-spacing: 0.5px; }
+  .pod.empty { opacity: 0.35; }
+
+  #lb-list { list-style: none; margin-top: 12px; }
+  #lb-list li {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 11px 18px; margin-bottom: 8px; font-size: 14px;
+  }
+  #lb-list .rank { color: var(--muted); font-weight: 900; font-style: italic; width: 26px; }
+  #lb-list .nm { flex: 1; font-weight: 700; }
+  #lb-list .nm .dot { color: var(--lime); font-size: 10px; margin-left: 6px; }
+  #lb-list .rec { color: var(--muted); font-size: 11px; }
+  #lb-list .pts { color: var(--lime); font-weight: 900; font-style: italic; min-width: 60px; text-align: right; }
+  #lb-list li.me { border-color: rgba(163, 230, 53, 0.5); }
+  #online-line { margin-top: 18px; font-size: 12px; color: var(--muted); line-height: 1.9; }
+  #online-line b { color: var(--text); font-weight: 600; }
+
+  /* ---------- QUESTS ---------- */
+  #quest-list { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 760px) { #quest-list { grid-template-columns: 1fr; } }
+  #quest-list li {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px;
+  }
+  #quest-list .qtop { display: flex; justify-content: space-between; align-items: baseline; }
+  #quest-list .qname { font-weight: 800; font-size: 14px; }
+  #quest-list .qreward { color: var(--gold); font-weight: 900; font-style: italic; font-size: 13px; white-space: nowrap; }
+  #quest-list .qdesc { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .qbar {
+    height: 7px; background: #10141b; border-radius: 4px; margin-top: 10px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .qfill { height: 100%; background: linear-gradient(90deg, var(--lime), #84cc16); border-radius: 4px; transition: width 0.4s; }
+  #quest-list .qprog { font-size: 10.5px; color: var(--muted); margin-top: 5px; text-align: right; }
+  #end-rewards { font-size: 14px; color: var(--gold); font-weight: 700; text-align: center; line-height: 1.9; }
+
+  /* ---------- FOOTER ---------- */
+  #controls-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 5;
+    display: flex; justify-content: center; gap: 22px; padding: 11px;
+    background: rgba(14, 17, 24, 0.92); border-top: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--muted);
+    backdrop-filter: blur(6px);
+  }
+  #controls-bar kbd {
+    font-family: inherit; background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 9px; color: var(--lime); margin-right: 7px; font-weight: 700;
+  }
+  body.in-game #topbar, body.in-game #bg-deco { display: none; }
+
+  /* ---------- GAME HUD ---------- */
+  #screen-game { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+  #scoreboard {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(14, 17, 24, 0.88); border: 1px solid var(--border); border-radius: 16px;
+    padding: 9px 26px; display: flex; align-items: center; gap: 18px;
+    font-weight: 900; font-size: 24px; font-style: italic;
+  }
+  .team-name { font-size: 11px; font-style: normal; letter-spacing: 2px; color: var(--muted); font-weight: 700; }
+  #score-red { color: var(--red); }
+  #score-blue { color: var(--blue); }
+  #timer { font-size: 14px; font-style: normal; color: var(--lime); min-width: 48px; text-align: center; font-weight: 700; }
+  #match-info {
+    position: absolute; top: 14px; right: 16px; background: rgba(14,17,24,0.88);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 14px; font-size: 10px; letter-spacing: 1.5px; color: var(--muted); font-weight: 700;
+  }
+  #hint {
+    position: absolute; top: 76px; left: 50%; transform: translateX(-50%);
+    background: rgba(14, 17, 24, 0.85); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 16px; font-size: 12px; color: var(--muted); transition: opacity 1s;
+  }
+  #hint b { color: var(--lime); }
+  #powerbar-wrap {
+    position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%);
+    width: 230px; height: 13px; background: rgba(0,0,0,0.6); border-radius: 8px;
+    border: 1px solid var(--lime-dark); display: none; overflow: hidden;
+  }
+  #powerbar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--lime), var(--gold), var(--red)); }
+  #announce {
+    position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%) scale(0.85) skewX(-6deg);
+    font-size: 72px; font-weight: 900; font-style: italic; opacity: 0; text-align: center; letter-spacing: 2px;
+    text-shadow: 0 6px 0 rgba(0,0,0,0.35), 0 0 40px rgba(163, 230, 53, 0.4);
+    transition: all 0.25s ease; white-space: nowrap;
+  }
+  #announce .sub { display: block; font-size: 17px; letter-spacing: 2px; margin-top: 8px; color: var(--text); font-style: normal; font-weight: 700; }
+  #announce.show { opacity: 1; transform: translate(-50%, -50%) scale(1) skewX(-6deg); }
+  #endscreen {
+    position: absolute; inset: 0; background: rgba(8, 10, 14, 0.86);
+    display: none; align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+    pointer-events: auto;
+  }
+  #endscreen.show { display: flex; }
+  #endscreen h1 { font-size: 52px; font-weight: 900; font-style: italic; letter-spacing: 1px; transform: skewX(-6deg); }
+  #endscreen .detail { font-size: 17px; color: var(--muted); font-weight: 700; letter-spacing: 2px; }
+  #end-goals { font-size: 13px; color: var(--muted); max-width: 420px; text-align: center; line-height: 1.8; }
+  #btn-leave-end {
+    margin-top: 12px; padding: 15px 38px; border: none; border-radius: 14px;
+    font-size: 14px; font-weight: 900; font-style: italic; letter-spacing: 2px;
+    background: linear-gradient(180deg, var(--lime), #84cc16); color: #16240a;
+  }
+  #btn-leave {
+    position: absolute; top: 14px; left: 16px; pointer-events: auto;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 9px 15px; border-radius: 10px;
+    background: rgba(14,17,24,0.88); border: 1px solid var(--border); color: var(--red);
+  }
+</style>
+</head>
+<body>
+<div id="bg-deco"></div>
+
+<header id="topbar">
+  <div class="logo">VOXEL <span class="cup">CUP</span> ⚽</div>
+  <div id="badge-online"><span class="dot"></span><b id="badge-n">0</b>&nbsp;online</div>
+</header>
+
+<!-- HOME -->
+<main id="screen-home" class="screen show">
+  <section class="hero">
+    <h1>VOXEL <span class="cup">CUP</span></h1>
+    <p>BLOCKY FOOTBALL <b>//</b> ONLINE <b>//</b> FREE</p>
+  </section>
+
+  <section class="builder">
+    <div class="builder-left">
+      <div id="avatar-view"></div>
+      <div class="skin-nav">
+        <button id="skin-prev" title="Previous skin">‹</button>
+        <div class="skin-mid">
+          <div id="skin-name">THE CAPTAIN</div>
+          <span id="skin-tag">ARMBAND</span>
+        </div>
+        <button id="skin-next" title="Next skin">›</button>
+      </div>
+      <div id="skin-desc">Born leader. Loudest voice on the pitch.</div>
+      <div id="skin-count">1 / 6</div>
+    </div>
+    <div class="builder-right">
+      <h2>SET UP YOUR PLAYER</h2>
+      <label class="fld" for="name-input">PLAYER NAME</label>
+      <input id="name-input" maxlength="12" placeholder="goal_machine" autocomplete="off">
+      <div id="my-stats"></div>
+      <label class="fld" style="margin-top:18px">GAME MODE</label>
+      <div class="mode-row">
+        <button class="mode-btn selected" id="mode-5v5">⚽ 5V5 MATCH</button>
+        <button class="mode-btn" id="mode-penalty">⚽ HEAD SOCCER</button>
+      </div>
+      <div class="play-row">
+        <button id="btn-queue">PLAY ONLINE ⚡</button>
+        <button id="btn-unqueue">✕ CANCEL QUEUE</button>
+        <button id="btn-bots">VS BOT</button>
+      </div>
+      <div id="queue-status"></div>
+      <div class="chips">
+        <span class="chip">🪙 <b id="chip-coins">0</b></span>
+        <span class="chip">ONLINE <b id="chip-online">0</b></span>
+        <span class="chip">IN QUEUE <b id="chip-queue">0</b></span>
+        <span class="chip">EMPTY SLOTS <b>FILLED BY BOTS</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="lb-section" id="quest-section" style="display:none">
+    <div class="lb-head">
+      <h2>🎯 Quests</h2>
+      <span>EARN COINS // REPEATABLE</span>
+    </div>
+    <ol id="quest-list"></ol>
+  </section>
+
+  <section class="lb-section">
+    <div class="lb-head">
+      <h2>🏆 Leaderboard</h2>
+      <span>WIN 3 PTS // DRAW 1 PT</span>
+    </div>
+    <div id="podium"></div>
+    <ol id="lb-list"></ol>
+    <div id="online-line"></div>
+  </section>
+</main>
+
+<!-- GAME HUD -->
+<div id="screen-game" class="screen">
+  <button id="btn-leave">← LEAVE</button>
+  <div id="scoreboard">
+    <span class="team-name">RED</span>
+    <span id="score-red">0</span>
+    <span id="timer">3:00</span>
+    <span id="score-blue">0</span>
+    <span class="team-name">BLUE</span>
+  </div>
+  <div id="match-info"></div>
+  <div id="hint"></div>
+  <div id="powerbar-wrap"><div id="powerbar"></div></div>
+  <div id="announce"></div>
+  <div id="endscreen">
+    <h1 id="end-title">FULL TIME</h1>
+    <div class="detail" id="end-detail"></div>
+    <div id="end-goals"></div>
+    <div id="end-rewards"></div>
+    <button id="btn-leave-end">BACK TO LOBBY</button>
+  </div>
+</div>
+
+<footer id="controls-bar">
+  <span><kbd>WASD</kbd>MOVE</span>
+  <span><kbd>SHIFT</kbd>SPRINT</span>
+  <span><kbd>SPACE</kbd>SHOOT · HOLD FOR POWER</span>
+  <span><kbd>E</kbd>SLIDE TACKLE</span>
+  <span><kbd>Q</kbd>SKILL MOVE</span>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.152.2/three.min.js"></script>
+<script src="client.js"></script>
+</body>
+</html>

@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voxel Cup ⚽</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #6abe30; }
+  canvas { display: block; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+
+  #scoreboard {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(20, 24, 18, 0.82); color: #fff; border-radius: 12px;
+    padding: 8px 22px; display: flex; align-items: center; gap: 16px;
+    font-weight: 700; font-size: 22px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .team-name { font-size: 14px; font-weight: 600; opacity: 0.9; }
+  #score-red { color: #ff6b5e; }
+  #score-blue { color: #6ea8ff; }
+  #timer { font-size: 15px; font-weight: 600; color: #d8e8c8; min-width: 48px; text-align: center; }
+
+  #tutorial {
+    position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+    background: rgba(20, 24, 18, 0.85); color: #e8f0e0; border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 8px; padding: 12px 18px; max-width: 360px; font-size: 13px; line-height: 1.5;
+  }
+  #tutorial b { color: #fff; }
+  #tutorial .title { font-size: 11px; letter-spacing: 1px; color: #aac89a; font-weight: 700; margin-bottom: 6px; }
+
+  #powerbar-wrap {
+    position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+    width: 220px; height: 14px; background: rgba(0,0,0,0.5); border-radius: 7px;
+    border: 2px solid rgba(255,255,255,0.6); display: none;
+  }
+  #powerbar { height: 100%; width: 0%; border-radius: 5px;
+    background: linear-gradient(90deg, #ffe14d, #ff9f2e, #ff4d2e); }
+
+  #hotbar {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 6px;
+  }
+  .slot {
+    width: 44px; height: 44px; background: rgba(30, 26, 20, 0.85);
+    border: 2px solid rgba(255,255,255,0.25); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+    position: relative;
+  }
+  .slot.active { border-color: #ffd84d; }
+  .slot .key {
+    position: absolute; bottom: -2px; right: -2px; background: #111; color: #fff;
+    font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 4px;
+  }
+
+  #announce {
+    position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
+    font-size: 72px; font-weight: 900; color: #fff; opacity: 0;
+    text-shadow: 0 4px 0 rgba(0,0,0,0.35), 0 0 30px rgba(255, 220, 80, 0.8);
+    transition: all 0.25s ease; letter-spacing: 4px;
+  }
+  #announce.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+  #endscreen {
+    position: absolute; inset: 0; background: rgba(10, 14, 8, 0.75);
+    display: none; align-items: center; justify-content: center; flex-direction: column;
+    color: #fff; gap: 12px;
+  }
+  #endscreen h1 { font-size: 52px; text-shadow: 0 3px 0 rgba(0,0,0,0.4); }
+  #endscreen p { font-size: 17px; color: #cde0bd; }
+
+  #playercount {
+    position: absolute; top: 14px; right: 16px; background: rgba(20,24,18,0.82);
+    color: #fff; border-radius: 10px; padding: 7px 14px; font-size: 13px; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="scoreboard">
+    <span class="team-name">🔴 MERAH</span>
+    <span id="score-red">0</span>
+    <span id="timer">3:00</span>
+    <span id="score-blue">0</span>
+    <span class="team-name">BIRU 🔵</span>
+  </div>
+  <div id="playercount">👤 6 pemain</div>
+  <div id="tutorial">
+    <div class="title">TUTORIAL</div>
+    Selamat datang di <b>Voxel Cup</b>! Gerak dengan <b>WASD</b>, lari cepat dengan
+    <b>Shift</b>. Dekati bola untuk menggiring. <b>Tahan Spasi</b> untuk mengisi
+    tenaga lalu lepas untuk menendang. Cetak gol ke gawang <b>kanan</b>!
+  </div>
+  <div id="powerbar-wrap"><div id="powerbar"></div></div>
+  <div id="hotbar">
+    <div class="slot active">⚽<span class="key">1</span></div>
+    <div class="slot">👟<span class="key">2</span></div>
+    <div class="slot"><span class="key">3</span></div>
+    <div class="slot"><span class="key">4</span></div>
+  </div>
+  <div id="announce"></div>
+  <div id="endscreen">
+    <h1 id="end-title">SELESAI</h1>
+    <p id="end-detail"></p>
+    <p><b>Tekan Enter</b> untuk main lagi</p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.152.2/three.min.js"></script>
+<script>
+// ============================== SETUP ==============================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8ed14f);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+
+const VIEW = 16;
+let aspect = innerWidth / innerHeight;
+const camera = new THREE.OrthographicCamera(-VIEW * aspect, VIEW * aspect, VIEW, -VIEW, 0.1, 200);
+const CAM_OFF = new THREE.Vector3(24, 26, 24);
+camera.position.copy(CAM_OFF);
+camera.lookAt(0, 0, 0);
+
+addEventListener('resize', () => {
+  aspect = innerWidth / innerHeight;
+  camera.left = -VIEW * aspect; camera.right = VIEW * aspect;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// Cahaya
+scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+const sun = new THREE.DirectionalLight(0xfff4d6, 0.9);
+sun.position.set(18, 30, 10);
+sun.castShadow = true;
+sun.shadow.camera.left = -30; sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30; sun.shadow.camera.bottom = -30;
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun);
+
+// ============================== LAPANGAN ==============================
+const FIELD = { halfX: 20, halfZ: 12, goalHalf: 4, goalH: 3 };
+
+function buildField() {
+  const tileA = new THREE.MeshLambertMaterial({ color: 0x7ec850 });
+  const tileB = new THREE.MeshLambertMaterial({ color: 0x8ed95c });
+  const tileGeo = new THREE.BoxGeometry(2, 1, 2);
+  for (let x = -FIELD.halfX; x < FIELD.halfX; x += 2) {
+    for (let z = -FIELD.halfZ; z < FIELD.halfZ; z += 2) {
+      const t = new THREE.Mesh(tileGeo, ((x + z) / 2) % 2 === 0 ? tileA : tileB);
+      t.position.set(x + 1, -0.5, z + 1);
+      t.receiveShadow = true;
+      scene.add(t);
+    }
+  }
+  // Tanah pinggir lapangan (warna lebih gelap, lebih luas)
+  const apron = new THREE.Mesh(
+    new THREE.BoxGeometry(FIELD.halfX * 2 + 24, 1, FIELD.halfZ * 2 + 24),
+    new THREE.MeshLambertMaterial({ color: 0x6aa843 })
+  );
+  apron.position.y = -0.55;
+  apron.receiveShadow = true;
+  scene.add(apron);
+
+  // Garis putih
+  const lineMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const addLine = (w, d, x, z) => {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), lineMat);
+    l.position.set(x, 0.02, z);
+    scene.add(l);
+  };
+  addLine(0.18, FIELD.halfZ * 2, 0, 0);                          // garis tengah
+  addLine(FIELD.halfX * 2, 0.18, 0, -FIELD.halfZ + 0.1);         // sisi
+  addLine(FIELD.halfX * 2, 0.18, 0, FIELD.halfZ - 0.1);
+  addLine(0.18, FIELD.halfZ * 2, -FIELD.halfX + 0.1, 0);         // garis gawang
+  addLine(0.18, FIELD.halfZ * 2, FIELD.halfX - 0.1, 0);
+  // Lingkaran tengah (dari segmen pendek)
+  for (let i = 0; i < 32; i++) {
+    const a = (i / 32) * Math.PI * 2;
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 0.16), lineMat);
+    s.position.set(Math.cos(a) * 4, 0.02, Math.sin(a) * 4);
+    s.rotation.y = -a + Math.PI / 2;
+    scene.add(s);
+  }
+  // Kotak penalti
+  [[-1, 0], [1, 0]].forEach(([side]) => {
+    const gx = side * FIELD.halfX;
+    addLine(0.16, 12, gx - side * 5, 0);
+    addLine(5, 0.16, gx - side * 2.5, -6);
+    addLine(5, 0.16, gx - side * 2.5, 6);
+  });
+
+  // Gawang
+  const postMat = new THREE.MeshLambertMaterial({ color: 0xf5f5f5 });
+  [[-1], [1]].forEach(([side]) => {
+    const gx = side * (FIELD.halfX + 0.3);
+    const mk = (w, h, d, x, y, z) => {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), postMat);
+      p.position.set(x, y, z); p.castShadow = true; scene.add(p);
+    };
+    mk(0.3, FIELD.goalH, 0.3, gx, FIELD.goalH / 2, -FIELD.goalHalf);
+    mk(0.3, FIELD.goalH, 0.3, gx, FIELD.goalH / 2, FIELD.goalHalf);
+    mk(0.3, 0.3, FIELD.goalHalf * 2 + 0.3, gx, FIELD.goalH, 0);
+    // Jaring sederhana
+    const net = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, FIELD.goalH, FIELD.goalHalf * 2),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
+    );
+    net.position.set(gx + side * 1.2, FIELD.goalH / 2, 0);
+    scene.add(net);
+  });
+
+  // Dekorasi pohon voxel di luar lapangan
+  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8a5a2b });
+  const leafMat = new THREE.MeshLambertMaterial({ color: 0x4caf3e });
+  const leafMat2 = new THREE.MeshLambertMaterial({ color: 0x5dc24d });
+  [[-26, -10], [-25, 8], [26, -7], [25, 11], [-12, -17], [8, -18], [14, 17], [-6, 18], [22, -16], [-22, 16]].forEach(([x, z], i) => {
+    const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.6, 0.8), trunkMat);
+    trunk.position.set(x, 0.8, z); trunk.castShadow = true; scene.add(trunk);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.8, 2.6), i % 2 ? leafMat : leafMat2);
+    leaf.position.set(x, 2.4, z); leaf.castShadow = true; scene.add(leaf);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1, 1.6), i % 2 ? leafMat2 : leafMat);
+    top.position.set(x, 3.7, z); top.castShadow = true; scene.add(top);
+  });
+}
+buildField();
+
+// ============================== KARAKTER VOKSEL ==============================
+const SKINS = [0xe8b88a, 0xd49a6a, 0xc68642, 0xf0c8a0];
+const HAIRS = [0x2b1c10, 0x111111, 0x6b4423, 0xc9a13b, 0xd13b3b];
+
+function makeLabel(name, level, isUser) {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 96;
+  const c = cv.getContext('2d');
+  c.font = 'bold 26px "Segoe UI", Arial';
+  c.textAlign = 'center';
+  c.fillStyle = 'rgba(0,0,0,0.55)';
+  c.fillText(`Lvl ${level}`, 129, 31);
+  c.fillText(name, 129, 65);
+  c.fillStyle = '#cfe9ff';
+  c.font = 'bold 24px "Segoe UI", Arial';
+  c.fillText(`Lvl ${level}`, 128, 30);
+  c.fillStyle = isUser ? '#ffd84d' : '#ffffff';
+  c.font = 'bold 28px "Segoe UI", Arial';
+  c.fillText(name, 128, 64);
+  const tex = new THREE.CanvasTexture(cv);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  sp.scale.set(4.6, 1.7, 1);
+  sp.position.y = 3.1;
+  return sp;
+}
+
+function makeCharacter(jerseyColor, name, level, isUser) {
+  const g = new THREE.Group();
+  const skin = SKINS[Math.floor(Math.random() * SKINS.length)];
+  const skinMat = new THREE.MeshLambertMaterial({ color: skin });
+  const jerseyMat = new THREE.MeshLambertMaterial({ color: jerseyColor });
+  const pantsMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const hairMat = new THREE.MeshLambertMaterial({ color: HAIRS[Math.floor(Math.random() * HAIRS.length)] });
+
+  const mk = (w, h, d, mat, x, y, z, parent) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z); m.castShadow = true;
+    (parent || g).add(m);
+    return m;
+  };
+
+  // Kaki (pivot di pinggul agar bisa diayun)
+  const legL = new THREE.Group(); legL.position.set(-0.22, 0.9, 0); g.add(legL);
+  const legR = new THREE.Group(); legR.position.set(0.22, 0.9, 0); g.add(legR);
+  mk(0.34, 0.9, 0.38, pantsMat, 0, -0.45, 0, legL);
+  mk(0.34, 0.9, 0.38, pantsMat, 0, -0.45, 0, legR);
+
+  // Badan
+  mk(0.95, 1.1, 0.55, jerseyMat, 0, 1.45, 0);
+
+  // Lengan
+  const armL = new THREE.Group(); armL.position.set(-0.62, 1.9, 0); g.add(armL);
+  const armR = new THREE.Group(); armR.position.set(0.62, 1.9, 0); g.add(armR);
+  mk(0.28, 0.85, 0.32, jerseyMat, 0, -0.32, 0, armL);
+  mk(0.28, 0.85, 0.32, jerseyMat, 0, -0.32, 0, armR);
+  mk(0.28, 0.25, 0.32, skinMat, 0, -0.85, 0, armL);
+  mk(0.28, 0.25, 0.32, skinMat, 0, -0.85, 0, armR);
+
+  // Kepala + rambut
+  mk(0.85, 0.85, 0.78, skinMat, 0, 2.45, 0);
+  mk(0.9, 0.3, 0.83, hairMat, 0, 2.82, 0);
+  mk(0.9, 0.35, 0.2, hairMat, 0, 2.6, -0.32);
+
+  g.add(makeLabel(name, level, isUser));
+  scene.add(g);
+
+  return {
+    mesh: g, legL, legR, armL, armR,
+    pos: g.position, vel: new THREE.Vector3(),
+    facing: 0, walkPhase: Math.random() * 6,
+    speed: 0, isUser: !!isUser, kickCooldown: 0,
+  };
+}
+
+// ============================== TIM & BOLA ==============================
+const RED = 0xd13b3b, BLUE = 0x2e6bd6;
+const redNames = [['Kamu', 1], ['mof', 18], ['Bodhi', 7]];
+const blueNames = [['Rahma', 20], ['skgz', 5], ['wheezy', 12]];
+
+const players = [];
+function spawnTeams() {
+  redNames.forEach(([n, lv], i) => {
+    const p = makeCharacter(RED, n, lv, i === 0);
+    p.team = 'red'; p.idx = i;
+    players.push(p);
+  });
+  blueNames.forEach(([n, lv], i) => {
+    const p = makeCharacter(BLUE, n, lv, false);
+    p.team = 'blue'; p.idx = i;
+    players.push(p);
+  });
+}
+spawnTeams();
+const user = players[0];
+
+// Formasi kickoff: [x, z] — merah menyerang ke +x, biru ke -x
+const FORM_RED = [[-4, 0], [-9, -5], [-9, 5]];
+const FORM_BLUE = [[4, 0], [9, -5], [9, 5]];
+
+const ball = (() => {
+  const group = new THREE.Group();
+  const sphere = new THREE.Mesh(
+    new THREE.SphereGeometry(0.38, 12, 10),
+    new THREE.MeshLambertMaterial({ color: 0xffffff })
+  );
+  sphere.castShadow = true;
+  group.add(sphere);
+  // Bercak hitam ala bola sepak
+  const dotMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  for (let i = 0; i < 6; i++) {
+    const d = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.06), dotMat);
+    const a = (i / 6) * Math.PI * 2;
+    d.position.set(Math.cos(a) * 0.34, Math.sin(a) * 0.34, (i % 2 ? 1 : -1) * 0.18);
+    d.lookAt(d.position.clone().multiplyScalar(2));
+    group.add(d);
+  }
+  scene.add(group);
+  return { mesh: group, pos: group.position, vel: new THREE.Vector3(), owner: null };
+})();
+
+function resetKickoff(kickingTeam) {
+  ball.pos.set(0, 0.38, 0);
+  ball.vel.set(0, 0, 0);
+  ball.owner = null;
+  players.forEach(p => {
+    const form = p.team === 'red' ? FORM_RED : FORM_BLUE;
+    p.pos.set(form[p.idx][0], 0, form[p.idx][1]);
+    p.vel.set(0, 0, 0);
+    p.facing = p.team === 'red' ? Math.PI / 2 : -Math.PI / 2;
+    // Tim yang kickoff maju sedikit ke bola
+    if (p.team === kickingTeam && p.idx === 0) {
+      p.pos.x = p.team === 'red' ? -1.5 : 1.5;
+    }
+  });
+}
+resetKickoff('red');
+
+// ============================== SUARA ==============================
+let audioCtx = null;
+function beep(freq, dur, type, vol) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), gn = audioCtx.createGain();
+    o.type = type || 'square'; o.frequency.value = freq;
+    gn.gain.setValueAtTime(vol || 0.08, audioCtx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    o.connect(gn).connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + dur);
+  } catch (e) { /* audio tidak tersedia */ }
+}
+const sfxKick = pow => beep(160 + pow * 120, 0.12, 'square', 0.1);
+const sfxGoal = () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.25, 'triangle', 0.12), i * 110)); };
+const sfxWhistle = () => beep(2200, 0.4, 'sawtooth', 0.05);
+
+// ============================== INPUT ==============================
+const keys = {};
+let charging = false, chargePower = 0;
+const powerWrap = document.getElementById('powerbar-wrap');
+const powerBar = document.getElementById('powerbar');
+
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space' && !charging && state === 'play') {
+    charging = true; chargePower = 0;
+    powerWrap.style.display = 'block';
+    e.preventDefault();
+  }
+  if (e.code === 'Enter' && state === 'over') restartMatch();
+});
+addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'Space' && charging) {
+    doKick(user, 0.35 + chargePower * 0.65);
+    charging = false;
+    powerWrap.style.display = 'none';
+  }
+});
+
+function doKick(p, power) {
+  if (p.kickCooldown > 0) return;
+  const dist = p.pos.distanceTo(ball.pos);
+  if (dist > 1.6) return;
+  const dir = new THREE.Vector3(Math.sin(p.facing), 0, Math.cos(p.facing));
+  const str = 10 + power * 18;
+  ball.vel.set(dir.x * str, power * 5.5, dir.z * str);
+  ball.owner = null;
+  p.kickCooldown = 0.35;
+  sfxKick(power);
+}
+
+// ============================== AI ==============================
+function updateAI(p, dt) {
+  const goalX = p.team === 'red' ? FIELD.halfX : -FIELD.halfX;
+  const ownGoalX = -goalX;
+  const toBall = ball.pos.distanceTo(p.pos);
+  const teammates = players.filter(q => q.team === p.team && q !== p);
+  const isClosest = teammates.every(q =>
+    (q.isUser) || q.pos.distanceTo(ball.pos) >= toBall - 0.01
+  );
+
+  let target = new THREE.Vector3();
+  let wantSprint = false;
+
+  // Pemain idx 1 jadi kiper: berdiri di mulut gawang mengikuti posisi bola
+  if (p.idx === 1) {
+    const keepX = ownGoalX + (p.team === 'red' ? 1.2 : -1.2);
+    const keepZ = THREE.MathUtils.clamp(ball.pos.z, -FIELD.goalHalf + 0.6, FIELD.goalHalf - 0.6);
+    target.set(keepX, 0, keepZ);
+    // Sapu bola yang masuk kotak penalti
+    if (Math.abs(ball.pos.x - ownGoalX) < 6 && Math.abs(ball.pos.z) < 7) {
+      target.copy(ball.pos);
+      wantSprint = true;
+      if (toBall < 1.4 && p.kickCooldown <= 0) {
+        p.facing = Math.atan2(goalX - p.pos.x, (Math.random() - 0.5) * 10);
+        doKick(p, 0.8);
+      }
+    }
+    const kdir = target.clone().sub(p.pos); kdir.y = 0;
+    if (kdir.length() > 0.3) {
+      kdir.normalize();
+      const sp = wantSprint ? 6.6 : 5.2;
+      p.vel.x = kdir.x * sp; p.vel.z = kdir.z * sp;
+      p.facing = Math.atan2(kdir.x, kdir.z);
+    } else { p.vel.x *= 0.8; p.vel.z *= 0.8; }
+    return;
+  }
+
+  if (isClosest && !p.isUser) {
+    // Kejar bola
+    target.copy(ball.pos);
+    wantSprint = toBall > 4;
+    if (toBall < 1.4 && p.kickCooldown <= 0) {
+      // Hadapkan ke gawang lawan lalu tendang
+      const aimZ = (Math.random() - 0.5) * FIELD.goalHalf * 1.4;
+      p.facing = Math.atan2(goalX - p.pos.x, aimZ - p.pos.z);
+      const distGoal = Math.abs(goalX - p.pos.x);
+      doKick(p, distGoal < 12 ? 0.85 : 0.45);
+    }
+  } else {
+    // Jaga posisi: formasi bergeser mengikuti bola
+    const form = p.team === 'red' ? FORM_RED : FORM_BLUE;
+    target.set(
+      form[p.idx][0] * 0.6 + ball.pos.x * 0.45 + (p.team === 'red' ? -2 : 2),
+      0,
+      form[p.idx][1] + ball.pos.z * 0.3
+    );
+  }
+
+  const dir = target.clone().sub(p.pos); dir.y = 0;
+  if (dir.length() > 0.4) {
+    dir.normalize();
+    const sp = (wantSprint ? 6.4 : 4.6);
+    p.vel.x = dir.x * sp; p.vel.z = dir.z * sp;
+    p.facing = Math.atan2(dir.x, dir.z);
+  } else {
+    p.vel.x *= 0.8; p.vel.z *= 0.8;
+  }
+}
+
+// ============================== MATCH STATE ==============================
+let state = 'play'; // play | goal | over
+let scoreRed = 0, scoreBlue = 0;
+let timeLeft = 180;
+let goalTimer = 0;
+
+const elRed = document.getElementById('score-red');
+const elBlue = document.getElementById('score-blue');
+const elTimer = document.getElementById('timer');
+const elAnnounce = document.getElementById('announce');
+const elEnd = document.getElementById('endscreen');
+
+function announce(text, color) {
+  elAnnounce.textContent = text;
+  elAnnounce.style.color = color || '#fff';
+  elAnnounce.classList.add('show');
+  setTimeout(() => elAnnounce.classList.remove('show'), 1700);
+}
+
+function onGoal(team) {
+  if (team === 'red') scoreRed++; else scoreBlue++;
+  elRed.textContent = scoreRed;
+  elBlue.textContent = scoreBlue;
+  announce('GOL!', team === 'red' ? '#ff6b5e' : '#6ea8ff');
+  sfxGoal();
+  state = 'goal';
+  goalTimer = 2;
+  ball.vel.multiplyScalar(0.1);
+  document.getElementById('tutorial').style.display = 'none';
+}
+
+function endMatch() {
+  state = 'over';
+  sfxWhistle();
+  const t = document.getElementById('end-title');
+  const d = document.getElementById('end-detail');
+  if (scoreRed > scoreBlue) { t.textContent = '🏆 MENANG!'; }
+  else if (scoreRed < scoreBlue) { t.textContent = '😢 KALAH'; }
+  else { t.textContent = '🤝 SERI'; }
+  d.textContent = `Merah ${scoreRed} - ${scoreBlue} Biru`;
+  elEnd.style.display = 'flex';
+}
+
+function restartMatch() {
+  scoreRed = 0; scoreBlue = 0; timeLeft = 180;
+  elRed.textContent = '0'; elBlue.textContent = '0';
+  elEnd.style.display = 'none';
+  state = 'play';
+  resetKickoff('red');
+}
+
+// ============================== GAME LOOP ==============================
+const clock = new THREE.Clock();
+
+function update(dt) {
+  if (state === 'goal') {
+    goalTimer -= dt;
+    if (goalTimer <= 0) {
+      resetKickoff((scoreRed + scoreBlue) % 2 === 0 ? 'blue' : 'red');
+      state = 'play';
+    }
+    return;
+  }
+  if (state !== 'play') return;
+
+  // Timer
+  timeLeft -= dt;
+  if (timeLeft <= 0) { timeLeft = 0; endMatch(); }
+  const m = Math.floor(timeLeft / 60), s = Math.floor(timeLeft % 60);
+  elTimer.textContent = `${m}:${String(s).padStart(2, '0')}`;
+
+  // Charge tendangan
+  if (charging) {
+    chargePower = Math.min(1, chargePower + dt * 1.6);
+    powerBar.style.width = (chargePower * 100) + '%';
+  }
+
+  // --- Kontrol pemain ---
+  const mv = new THREE.Vector3(
+    (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0), 0,
+    (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0)
+  );
+  // Rotasi input 45° agar searah kamera isometrik
+  if (mv.lengthSq() > 0) {
+    mv.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 4);
+    const sp = keys['ShiftLeft'] || keys['ShiftRight'] ? 7.2 : 5;
+    user.vel.x = mv.x * sp; user.vel.z = mv.z * sp;
+    user.facing = Math.atan2(mv.x, mv.z);
+  } else {
+    user.vel.x *= 0.75; user.vel.z *= 0.75;
+  }
+
+  // --- AI ---
+  players.forEach(p => { if (!p.isUser) updateAI(p, dt); });
+
+  // --- Gerak semua pemain ---
+  players.forEach(p => {
+    p.kickCooldown = Math.max(0, p.kickCooldown - dt);
+    p.pos.x += p.vel.x * dt;
+    p.pos.z += p.vel.z * dt;
+    p.pos.x = THREE.MathUtils.clamp(p.pos.x, -FIELD.halfX - 2, FIELD.halfX + 2);
+    p.pos.z = THREE.MathUtils.clamp(p.pos.z, -FIELD.halfZ - 2, FIELD.halfZ + 2);
+    p.mesh.rotation.y = p.facing;
+
+    // Animasi jalan
+    const moving = Math.hypot(p.vel.x, p.vel.z) > 0.5;
+    if (moving) p.walkPhase += dt * 11;
+    const sw = moving ? Math.sin(p.walkPhase) * 0.6 : 0;
+    p.legL.rotation.x = sw; p.legR.rotation.x = -sw;
+    p.armL.rotation.x = -sw * 0.7; p.armR.rotation.x = sw * 0.7;
+  });
+
+  // Tabrakan antar pemain (dorong ringan)
+  for (let i = 0; i < players.length; i++) {
+    for (let j = i + 1; j < players.length; j++) {
+      const a = players[i], b = players[j];
+      const d = a.pos.distanceTo(b.pos);
+      if (d < 0.9 && d > 0.001) {
+        const push = a.pos.clone().sub(b.pos).normalize().multiplyScalar((0.9 - d) / 2);
+        a.pos.add(push); b.pos.sub(push);
+      }
+    }
+  }
+
+  // --- Fisika bola ---
+  ball.vel.y -= 22 * dt;                 // gravitasi
+  ball.pos.addScaledVector(ball.vel, dt);
+  if (ball.pos.y < 0.38) {
+    ball.pos.y = 0.38;
+    ball.vel.y = Math.abs(ball.vel.y) > 1.5 ? -ball.vel.y * 0.45 : 0;
+  }
+  const ground = ball.pos.y <= 0.4;
+  if (ground) { ball.vel.x *= Math.pow(0.35, dt); ball.vel.z *= Math.pow(0.35, dt); }
+
+  // Pantul dinding samping
+  if (Math.abs(ball.pos.z) > FIELD.halfZ - 0.4) {
+    ball.pos.z = Math.sign(ball.pos.z) * (FIELD.halfZ - 0.4);
+    ball.vel.z *= -0.65;
+  }
+  // Gol atau pantul garis gawang
+  if (Math.abs(ball.pos.x) > FIELD.halfX - 0.3) {
+    const inMouth = Math.abs(ball.pos.z) < FIELD.goalHalf && ball.pos.y < FIELD.goalH;
+    if (inMouth && Math.abs(ball.pos.x) > FIELD.halfX + 0.2) {
+      onGoal(ball.pos.x > 0 ? 'red' : 'blue');
+      return;
+    }
+    if (!inMouth) {
+      ball.pos.x = Math.sign(ball.pos.x) * (FIELD.halfX - 0.3);
+      ball.vel.x *= -0.65;
+    }
+  }
+  // Bola dalam gawang: berhenti di jaring
+  if (Math.abs(ball.pos.x) > FIELD.halfX + 1.3) {
+    ball.pos.x = Math.sign(ball.pos.x) * (FIELD.halfX + 1.3);
+    ball.vel.multiplyScalar(0.2);
+  }
+
+  // Putaran bola mengikuti gerak
+  ball.mesh.rotation.z -= ball.vel.x * dt * 2;
+  ball.mesh.rotation.x += ball.vel.z * dt * 2;
+
+  // --- Menggiring: bola lengket di depan pemain terdekat ---
+  const speed2 = ball.vel.x * ball.vel.x + ball.vel.z * ball.vel.z;
+  if (ground && speed2 < 36) {
+    let best = null, bestD = 1.15;
+    players.forEach(p => {
+      const d = p.pos.distanceTo(ball.pos);
+      if (d < bestD && p.kickCooldown <= 0) { best = p; bestD = d; }
+    });
+    if (best) {
+      const front = new THREE.Vector3(Math.sin(best.facing), 0, Math.cos(best.facing));
+      const targetPos = best.pos.clone().addScaledVector(front, 0.85);
+      targetPos.y = 0.38;
+      ball.pos.lerp(targetPos, Math.min(1, dt * 9));
+      ball.vel.set(best.vel.x, 0, best.vel.z);
+    }
+  }
+
+  // --- Kamera mengikuti aksi ---
+  const focus = user.pos.clone().lerp(ball.pos, 0.35);
+  focus.x = THREE.MathUtils.clamp(focus.x, -12, 12);
+  focus.z = THREE.MathUtils.clamp(focus.z, -6, 6);
+  const camTarget = focus.clone().add(CAM_OFF);
+  camera.position.lerp(camTarget, Math.min(1, dt * 4));
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  update(dt);
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

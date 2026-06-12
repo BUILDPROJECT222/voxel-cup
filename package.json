@@ -1,0 +1,16 @@
+{
+  "name": "voxel-cup",
+  "version": "0.1.0",
+  "description": "Online blocky football — 5v5 voxel matches + Head Soccer 1v1, with quests, coins and a leaderboard.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
