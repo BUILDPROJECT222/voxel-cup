@@ -12,6 +12,8 @@ const SKIN_PRESETS = [
 let mySkin = parseInt(localStorage.getItem('voxelcup_skin') || '0', 10) || 0;
 if (mySkin < 0 || mySkin >= SKIN_PRESETS.length) mySkin = 0;
 let myMode = localStorage.getItem('voxelcup_mode') === 'penalty' ? 'penalty' : '5v5';
+let myWallet = localStorage.getItem('voxelcup_wallet') || '';
+let myCountry = localStorage.getItem('voxelcup_country') || '';
 
 // ============================== UI HELPERS ==============================
 const $ = id => document.getElementById(id);
@@ -66,7 +68,20 @@ function ensureJoin() {
   }
   myName = name;
   localStorage.setItem('voxelcup_name', name);
-  sendMsg({ t: 'join', name, skin: mySkin });
+
+  // wallet: validate base58 length (32-44 chars typical for Solana)
+  const walletRaw = $('wallet-input').value.trim();
+  const walletOk = walletRaw.length >= 32 && walletRaw.length <= 44 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(walletRaw);
+  myWallet = walletOk ? walletRaw : '';
+  localStorage.setItem('voxelcup_wallet', myWallet);
+  $('wallet-status').innerHTML = myWallet
+    ? '<span class="wallet-ok">✓ WALLET SAVED</span>'
+    : walletRaw ? '<span style="color:var(--red);font-size:11px;font-weight:700">✗ INVALID ADDRESS</span>' : '';
+
+  myCountry = $('country-select').value;
+  localStorage.setItem('voxelcup_country', myCountry);
+
+  sendMsg({ t: 'join', name, skin: mySkin, wallet: myWallet, country: myCountry });
   return true;
 }
 
@@ -426,6 +441,8 @@ $('skin-prev').onclick = () => { mySkin = (mySkin + SKIN_PRESETS.length - 1) % S
 $('skin-next').onclick = () => { mySkin = (mySkin + 1) % SKIN_PRESETS.length; updateSkinUI(); };
 updateSkinUI();
 $('name-input').value = localStorage.getItem('voxelcup_name') || '';
+$('wallet-input').value = myWallet;
+if (myCountry) $('country-select').value = myCountry;
 
 // ============================== MATCH STATE ==============================
 let inMatch = false;

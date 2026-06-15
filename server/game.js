@@ -85,7 +85,11 @@ class Match {
       const owner = this.lastTouch;
       const isProtected = owner && owner !== p && owner.dodge > 0;
       if (!isProtected) {
-        b.vx = p.sdx * 8; b.vz = p.sdz * 8; b.vy = 1.2;
+        // Ball sticks to the tackler — place it just ahead, minimal velocity
+        b.x = p.x + p.sdx * 0.9;
+        b.z = p.z + p.sdz * 0.9;
+        b.y = 0.38;
+        b.vx = p.sdx * 1.5; b.vz = p.sdz * 1.5; b.vy = 0;
         if (owner && owner !== p && owner.team !== p.team) p.tackles++;
         this.lastTouch = p;
         p.stole = true;
@@ -216,7 +220,7 @@ class Match {
         p.slide -= dt;
         p.vx = p.sdx * 9.5; p.vz = p.sdz * 9.5;
         this.slideEffects(p);
-        if (p.slide <= 0) p.recover = 0.45;
+        if (p.slide <= 0) p.recover = 0.2;
       } else {
         if (p.recover > 0) { p.recover -= dt; mult = 0.3; } // bangun setelah sliding
         if (p.bot) {
@@ -299,7 +303,7 @@ class Match {
     if (ground && speed2 < 36) {
       let best = null, bestD = 1.15;
       for (const p of this.players) {
-        if (p.slide > 0 || p.stun > 0) continue; // tak bisa menggiring saat meluncur/tersandung
+        if (p.slide > 0 || p.stun > 0) continue;
         const d = dist(p.x, p.z, b.x, b.z) - (p.dodge > 0 ? 0.4 : 0); // penggocek menang rebutan
         if (d < bestD && p.kickCd <= 0) { best = p; bestD = d; }
       }
