@@ -28,6 +28,7 @@ class Match {
     this.goalTimer = 0;
     this.kickoffNext = 'blue';
     this.lastTouch = null;
+    this.ballOwner = null; // the player currently dribbling the ball
     this.ball = { x: 0, y: 0.38, z: 0, vx: 0, vy: 0, vz: 0 };
     this.players = roster.map(r => ({
       id: r.id, name: r.name, level: r.level, bot: r.bot, team: r.team, idx: r.idx,
@@ -42,6 +43,7 @@ class Match {
 
   resetKickoff(team) {
     Object.assign(this.ball, { x: 0, y: 0.38, z: 0, vx: 0, vy: 0, vz: 0 });
+    this.ballOwner = null;
     for (const p of this.players) {
       p.x = p.team === 'red' ? FORM[p.idx][0] : -FORM[p.idx][0];
       p.z = FORM[p.idx][1];
@@ -79,23 +81,30 @@ class Match {
   }
 
   slideEffects(p) {
-    const b = this.ball;
-    // Curi bola — kecuali pembawanya sedang melakukan gocekan (kebal tackle)
-    if (!p.stole && b.y < 1.2 && dist(p.x, p.z, b.x, b.z) < 1.3) {
-      const owner = this.lastTouch;
-      const isProtected = owner && owner !== p && owner.dodge > 0;
-      if (!isProtected) {
-        // Ball sticks to the tackler — place it just ahead, minimal velocity
-        b.x = p.x + p.sdx * 0.9;
-        b.z = p.z + p.sdz * 0.9;
-        b.y = 0.38;
-        b.vx = p.sdx * 1.5; b.vz = p.sdz * 1.5; b.vy = 0;
-        if (owner && owner !== p && owner.team !== p.team) p.tackles++;
+    if (p.stole) return; // already stole this slide, ownership handled below
+
+    const owner = this.ballOwner;
+
+    // Steal from the current ball owner
+    if (owner && owner !== p && owner.team !== p.team) {
+      if (owner.dodge <= 0 && dist(p.x, p.z, owner.x, owner.z) < 1.6) {
+        p.tackles++;
+        this.ballOwner = p;
         this.lastTouch = p;
         p.stole = true;
+        return;
       }
     }
-    // Lawan yang tertabrak sliding tersandung sebentar
+
+    // Steal loose ball via slide
+    if (!owner && this.ball.y < 1.2 && dist(p.x, p.z, this.ball.x, this.ball.z) < 1.3) {
+      this.ballOwner = p;
+      this.lastTouch = p;
+      p.stole = true;
+      return;
+    }
+
+    // Stun opponents caught by the slide
     for (const q of this.players) {
       if (q === p || q.team === p.team || q.slide > 0 || q.dodge > 0) continue;
       if (dist(p.x, p.z, q.x, q.z) < 0.95) q.stun = Math.max(q.stun, 0.65);
@@ -104,12 +113,17 @@ class Match {
 
   doKick(p, power) {
     if (p.kickCd > 0) return;
-    if (dist(p.x, p.z, this.ball.x, this.ball.z) > 1.7) return;
+    // Must own the ball, OR be kicking a loose ball that's nearby
+    if (this.ballOwner !== p) {
+      if (this.ballOwner) return; // someone else has it
+      if (dist(p.x, p.z, this.ball.x, this.ball.z) > 1.7) return;
+    }
     const str = 10 + power * 18;
     this.ball.vx = Math.sin(p.facing) * str;
     this.ball.vz = Math.cos(p.facing) * str;
     this.ball.vy = power * 5.5;
     p.kickCd = 0.35;
+    this.ballOwner = null; // ball is loose after kick
     this.lastTouch = p;
   }
 
@@ -265,56 +279,74 @@ class Match {
       }
     }
 
-    // --- Fisika bola ---
+    // --- Ball ownership: snap to owner, or run physics if loose ---
     const b = this.ball;
-    b.vy -= 22 * dt;
-    b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
-    if (b.y < 0.38) {
-      b.y = 0.38;
-      b.vy = Math.abs(b.vy) > 1.5 ? -b.vy * 0.45 : 0;
-    }
-    const ground = b.y <= 0.4;
-    if (ground) {
-      const f = Math.pow(0.35, dt);
-      b.vx *= f; b.vz *= f;
-    }
-    if (Math.abs(b.z) > FIELD.halfZ - 0.4) {
-      b.z = Math.sign(b.z) * (FIELD.halfZ - 0.4);
-      b.vz *= -0.65;
-    }
-    if (Math.abs(b.x) > FIELD.halfX - 0.3) {
-      const inMouth = Math.abs(b.z) < FIELD.goalHalf && b.y < FIELD.goalH;
-      if (inMouth && Math.abs(b.x) > FIELD.halfX + 0.2) {
-        this.onGoal(b.x > 0 ? 'red' : 'blue');
-        return;
+
+    if (this.ballOwner) {
+      const p = this.ballOwner;
+      // Drop ball if owner is stunned
+      if (p.stun > 0) {
+        this.ballOwner = null;
+      } else {
+        // Snap ball to just in front of the owner every tick
+        b.x = p.x + Math.sin(p.facing) * 0.85;
+        b.z = p.z + Math.cos(p.facing) * 0.85;
+        b.y = 0.38; b.vy = 0;
+        b.vx = p.vx; b.vz = p.vz;
+        this.lastTouch = p;
+        // Goal check while dribbling
+        if (Math.abs(b.x) > FIELD.halfX + 0.2 && Math.abs(b.z) < FIELD.goalHalf && b.y < FIELD.goalH) {
+          this.ballOwner = null;
+          this.onGoal(b.x > 0 ? 'red' : 'blue');
+          return;
+        }
       }
-      if (!inMouth) {
-        b.x = Math.sign(b.x) * (FIELD.halfX - 0.3);
-        b.vx *= -0.65;
-      }
-    }
-    if (Math.abs(b.x) > FIELD.halfX + 1.3) {
-      b.x = Math.sign(b.x) * (FIELD.halfX + 1.3);
-      b.vx *= 0.2; b.vy *= 0.2; b.vz *= 0.2;
     }
 
-    // --- Menggiring: bola lengket di depan pemain terdekat ---
-    const speed2 = b.vx * b.vx + b.vz * b.vz;
-    if (ground && speed2 < 36) {
-      let best = null, bestD = 1.15;
-      for (const p of this.players) {
-        if (p.slide > 0 || p.stun > 0) continue;
-        const d = dist(p.x, p.z, b.x, b.z) - (p.dodge > 0 ? 0.4 : 0); // penggocek menang rebutan
-        if (d < bestD && p.kickCd <= 0) { best = p; bestD = d; }
+    if (!this.ballOwner) {
+      // --- Loose ball physics ---
+      b.vy -= 22 * dt;
+      b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+      if (b.y < 0.38) {
+        b.y = 0.38;
+        b.vy = Math.abs(b.vy) > 1.5 ? -b.vy * 0.45 : 0;
       }
-      if (best) {
-        const fx = best.x + Math.sin(best.facing) * 0.85;
-        const fz = best.z + Math.cos(best.facing) * 0.85;
-        const k = Math.min(1, dt * 9);
-        b.x += (fx - b.x) * k; b.z += (fz - b.z) * k;
-        b.y = 0.38; b.vy = 0;
-        b.vx = best.vx; b.vz = best.vz;
-        this.lastTouch = best;
+      if (b.y <= 0.4) {
+        const f = Math.pow(0.35, dt);
+        b.vx *= f; b.vz *= f;
+      }
+      if (Math.abs(b.z) > FIELD.halfZ - 0.4) {
+        b.z = Math.sign(b.z) * (FIELD.halfZ - 0.4);
+        b.vz *= -0.65;
+      }
+      if (Math.abs(b.x) > FIELD.halfX - 0.3) {
+        const inMouth = Math.abs(b.z) < FIELD.goalHalf && b.y < FIELD.goalH;
+        if (inMouth && Math.abs(b.x) > FIELD.halfX + 0.2) {
+          this.onGoal(b.x > 0 ? 'red' : 'blue');
+          return;
+        }
+        if (!inMouth) {
+          b.x = Math.sign(b.x) * (FIELD.halfX - 0.3);
+          b.vx *= -0.65;
+        }
+      }
+      if (Math.abs(b.x) > FIELD.halfX + 1.3) {
+        b.x = Math.sign(b.x) * (FIELD.halfX + 1.3);
+        b.vx *= 0.2; b.vy *= 0.2; b.vz *= 0.2;
+      }
+
+      // Auto-pickup: first player to touch the loose ball owns it
+      if (b.y <= 0.5) {
+        let best = null, bestD = 0.95;
+        for (const p of this.players) {
+          if (p.slide > 0 || p.stun > 0) continue;
+          const d = dist(p.x, p.z, b.x, b.z) - (p.dodge > 0 ? 0.25 : 0);
+          if (d < bestD) { best = p; bestD = d; }
+        }
+        if (best) {
+          this.ballOwner = best;
+          this.lastTouch = best;
+        }
       }
     }
   }

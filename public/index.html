@@ -129,14 +129,42 @@
   .field-input:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(163,230,53,0.12); }
   #name-input { font-size: 16px; }
   #wallet-input { font-size: 13px; font-weight: 500; letter-spacing: 0.3px; }
-  #country-select { appearance: none; -webkit-appearance: none; cursor: pointer;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b96a5' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 16px center; padding-right: 40px;
-  }
-  #country-select option { background: #1d242f; }
   #my-stats { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 16px; }
   .wallet-ok { display: inline-block; color: var(--lime); font-size: 11px; margin-top: 6px; font-weight: 700; letter-spacing: 1px; }
   .opt-label { font-size: 10px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+
+  /* ---------- COUNTRY PICKER ---------- */
+  .country-picker { position: relative; width: 100%; }
+  .country-btn {
+    display: flex; align-items: center; gap: 10px; text-align: left; cursor: pointer;
+    width: 100%; padding: 11px 16px; background: #10141b;
+    border: 1px solid var(--border); border-radius: 12px;
+    color: var(--text); font-family: inherit; font-size: 14px; font-weight: 600;
+    outline: none; transition: border-color 0.12s;
+  }
+  .country-btn:focus, .country-btn.open { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(163,230,53,0.12); }
+  .country-btn .cb-label { flex: 1; }
+  .country-btn .cb-arrow { margin-left: auto; flex-shrink: 0; transition: transform 0.15s; fill: var(--muted); }
+  .country-btn.open .cb-arrow { transform: rotate(180deg); }
+  .country-flag { width: 26px; height: 19px; border-radius: 3px; object-fit: cover; flex-shrink: 0; display: none; }
+  .country-flag.show { display: block; }
+  .country-dropdown {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 200;
+    background: #10141b; border: 1px solid var(--lime); border-radius: 12px;
+    max-height: 230px; overflow-y: auto; display: none;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .country-dropdown.open { display: block; }
+  .country-option {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px; cursor: pointer; font-size: 13px; font-weight: 600;
+    border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.08s;
+  }
+  .country-option:last-child { border-bottom: none; }
+  .country-option:hover { background: rgba(163,230,53,0.1); color: var(--lime); }
+  .country-option.selected { background: rgba(163,230,53,0.15); color: var(--lime); }
+  .country-option img { width: 26px; height: 19px; border-radius: 3px; object-fit: cover; flex-shrink: 0; }
 
   .mode-row { display: flex; gap: 8px; margin-bottom: 18px; }
   .mode-btn {
@@ -350,42 +378,16 @@
       <input id="wallet-input" class="field-input" placeholder="Paste your Solana address…" autocomplete="off" maxlength="88">
       <div id="wallet-status"></div>
 
-      <label class="fld" style="margin-top:18px" for="country-select">NATION <span class="opt-label">WORLD CUP</span></label>
-      <select id="country-select" class="field-input">
-        <option value="">🌍  Select your country…</option>
-        <option value="AR">🇦🇷  Argentina</option>
-        <option value="AU">🇦🇺  Australia</option>
-        <option value="BE">🇧🇪  Belgium</option>
-        <option value="BR">🇧🇷  Brazil</option>
-        <option value="CM">🇨🇲  Cameroon</option>
-        <option value="CA">🇨🇦  Canada</option>
-        <option value="CR">🇨🇷  Costa Rica</option>
-        <option value="HR">🇭🇷  Croatia</option>
-        <option value="DK">🇩🇰  Denmark</option>
-        <option value="EC">🇪🇨  Ecuador</option>
-        <option value="ENG">🏴  England</option>
-        <option value="FR">🇫🇷  France</option>
-        <option value="DE">🇩🇪  Germany</option>
-        <option value="GH">🇬🇭  Ghana</option>
-        <option value="IR">🇮🇷  Iran</option>
-        <option value="JP">🇯🇵  Japan</option>
-        <option value="MX">🇲🇽  Mexico</option>
-        <option value="MA">🇲🇦  Morocco</option>
-        <option value="NL">🇳🇱  Netherlands</option>
-        <option value="PL">🇵🇱  Poland</option>
-        <option value="PT">🇵🇹  Portugal</option>
-        <option value="QA">🇶🇦  Qatar</option>
-        <option value="SA">🇸🇦  Saudi Arabia</option>
-        <option value="SN">🇸🇳  Senegal</option>
-        <option value="RS">🇷🇸  Serbia</option>
-        <option value="KR">🇰🇷  South Korea</option>
-        <option value="ES">🇪🇸  Spain</option>
-        <option value="CH">🇨🇭  Switzerland</option>
-        <option value="TN">🇹🇳  Tunisia</option>
-        <option value="UY">🇺🇾  Uruguay</option>
-        <option value="US">🇺🇸  USA</option>
-        <option value="WAL">🏴  Wales</option>
-      </select>
+      <label class="fld" style="margin-top:18px">NATION <span class="opt-label">WORLD CUP</span></label>
+      <div class="country-picker" id="country-picker">
+        <button type="button" class="country-btn" id="country-btn">
+          <img class="country-flag" id="country-flag-img" src="" alt="">
+          <span class="cb-label" id="country-label">🌍  Select your nation…</span>
+          <svg class="cb-arrow" width="12" height="8" viewBox="0 0 12 8"><path d="M6 8L0 0h12z"/></svg>
+        </button>
+        <div class="country-dropdown" id="country-dropdown"></div>
+      </div>
+      <input type="hidden" id="country-select">
 
       <label class="fld" style="margin-top:18px">GAME MODE</label>
       <div class="mode-row">

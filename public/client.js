@@ -15,6 +15,105 @@ let myMode = localStorage.getItem('voxelcup_mode') === 'penalty' ? 'penalty' : '
 let myWallet = localStorage.getItem('voxelcup_wallet') || '';
 let myCountry = localStorage.getItem('voxelcup_country') || '';
 
+// ============================== COUNTRY PICKER ==============================
+const COUNTRIES = [
+  { code: 'AR', flag: 'ar', name: 'Argentina' },
+  { code: 'AU', flag: 'au', name: 'Australia' },
+  { code: 'BE', flag: 'be', name: 'Belgium' },
+  { code: 'BR', flag: 'br', name: 'Brazil' },
+  { code: 'CM', flag: 'cm', name: 'Cameroon' },
+  { code: 'CA', flag: 'ca', name: 'Canada' },
+  { code: 'CR', flag: 'cr', name: 'Costa Rica' },
+  { code: 'HR', flag: 'hr', name: 'Croatia' },
+  { code: 'DK', flag: 'dk', name: 'Denmark' },
+  { code: 'EC', flag: 'ec', name: 'Ecuador' },
+  { code: 'ENG', flag: 'gb-eng', name: 'England' },
+  { code: 'FR', flag: 'fr', name: 'France' },
+  { code: 'DE', flag: 'de', name: 'Germany' },
+  { code: 'GH', flag: 'gh', name: 'Ghana' },
+  { code: 'IR', flag: 'ir', name: 'Iran' },
+  { code: 'JP', flag: 'jp', name: 'Japan' },
+  { code: 'MX', flag: 'mx', name: 'Mexico' },
+  { code: 'MA', flag: 'ma', name: 'Morocco' },
+  { code: 'NL', flag: 'nl', name: 'Netherlands' },
+  { code: 'PL', flag: 'pl', name: 'Poland' },
+  { code: 'PT', flag: 'pt', name: 'Portugal' },
+  { code: 'QA', flag: 'qa', name: 'Qatar' },
+  { code: 'SA', flag: 'sa', name: 'Saudi Arabia' },
+  { code: 'SN', flag: 'sn', name: 'Senegal' },
+  { code: 'RS', flag: 'rs', name: 'Serbia' },
+  { code: 'KR', flag: 'kr', name: 'South Korea' },
+  { code: 'ES', flag: 'es', name: 'Spain' },
+  { code: 'CH', flag: 'ch', name: 'Switzerland' },
+  { code: 'TN', flag: 'tn', name: 'Tunisia' },
+  { code: 'UY', flag: 'uy', name: 'Uruguay' },
+  { code: 'US', flag: 'us', name: 'USA' },
+  { code: 'WAL', flag: 'gb-wls', name: 'Wales' },
+];
+const flagUrl = f => `https://flagcdn.com/32x24/${f}.png`;
+
+function initCountryPicker() {
+  const btn = $('country-btn');
+  const dropdown = $('country-dropdown');
+  const flagImg = $('country-flag-img');
+  const labelEl = $('country-label');
+  const hidden = $('country-select');
+
+  // Build options
+  dropdown.innerHTML = COUNTRIES.map(c =>
+    `<div class="country-option${c.code === myCountry ? ' selected' : ''}" data-code="${c.code}" data-flag="${c.flag}">
+       <img src="${flagUrl(c.flag)}" alt="${c.name}" loading="lazy">
+       <span>${c.name}</span>
+     </div>`
+  ).join('');
+
+  // Set initial display
+  function applySelection(code) {
+    const c = COUNTRIES.find(x => x.code === code);
+    if (c) {
+      flagImg.src = flagUrl(c.flag);
+      flagImg.classList.add('show');
+      labelEl.textContent = c.name;
+    } else {
+      flagImg.classList.remove('show');
+      labelEl.textContent = '🌍  Select your nation…';
+    }
+    hidden.value = code || '';
+    dropdown.querySelectorAll('.country-option').forEach(el =>
+      el.classList.toggle('selected', el.dataset.code === code));
+  }
+  applySelection(myCountry);
+
+  // Toggle open/close
+  btn.addEventListener('click', () => {
+    const open = dropdown.classList.toggle('open');
+    btn.classList.toggle('open', open);
+    if (open) {
+      const sel = dropdown.querySelector('.selected');
+      if (sel) sel.scrollIntoView({ block: 'nearest' });
+    }
+  });
+
+  // Select option
+  dropdown.addEventListener('click', e => {
+    const opt = e.target.closest('.country-option');
+    if (!opt) return;
+    myCountry = opt.dataset.code;
+    localStorage.setItem('voxelcup_country', myCountry);
+    applySelection(myCountry);
+    dropdown.classList.remove('open');
+    btn.classList.remove('open');
+  });
+
+  // Close on outside click
+  document.addEventListener('click', e => {
+    if (!$('country-picker').contains(e.target)) {
+      dropdown.classList.remove('open');
+      btn.classList.remove('open');
+    }
+  });
+}
+
 // ============================== UI HELPERS ==============================
 const $ = id => document.getElementById(id);
 const screens = { home: $('screen-home'), game: $('screen-game') };
@@ -442,7 +541,7 @@ $('skin-next').onclick = () => { mySkin = (mySkin + 1) % SKIN_PRESETS.length; up
 updateSkinUI();
 $('name-input').value = localStorage.getItem('voxelcup_name') || '';
 $('wallet-input').value = myWallet;
-if (myCountry) $('country-select').value = myCountry;
+initCountryPicker();
 
 // ============================== MATCH STATE ==============================
 let inMatch = false;
@@ -746,19 +845,17 @@ function updateCharVisual(c, x, z, facing, dt, soft, state = 0) {
   c.mesh.position.x = x;
   c.mesh.position.z = z;
 
-  if (c.tilt === undefined) { c.tilt = 0; c.spin = 0; c.amp = 0; c.baseYaw = facing; }
+  if (c.tilt === undefined) { c.tilt = 0; c.spin = 0; c.amp = 0; c.lean = 0; c.baseYaw = facing; }
 
-  // Sliding: badan rebah ke belakang, kaki lurus ke depan
+  // Slide: body tilts back
   const tTilt = state === 1 ? -1.05 : 0;
   c.tilt += (tTilt - c.tilt) * Math.min(1, dt * 12);
-  c.mesh.rotation.x = c.tilt;
-  c.mesh.position.y = Math.abs(c.tilt) * 0.16;
 
-  // Gocekan: putaran badan 360°
+  // Dodge: 360° spin
   if (state === 3 || (c.spin > 0 && c.spin < Math.PI * 2)) c.spin += dt * 13;
   if (c.spin >= Math.PI * 2) c.spin = 0;
 
-  // Tersandung: sempoyongan
+  // Stun: sideways wobble
   const wobble = state === 2 ? Math.sin(performance.now() * 0.02) * 0.16 : 0;
   c.mesh.rotation.z += (wobble - c.mesh.rotation.z) * Math.min(1, dt * 12);
 
@@ -766,18 +863,43 @@ function updateCharVisual(c, x, z, facing, dt, soft, state = 0) {
   c.mesh.rotation.y = c.baseYaw + c.spin;
 
   if (state === 1) {
-    // Pose meluncur
+    // Slide pose: body flat, legs out front, arms back
+    c.lean = 0;
+    c.mesh.rotation.x = c.tilt;
+    c.mesh.position.y = Math.abs(c.tilt) * 0.16;
     c.legL.rotation.x += (-1.35 - c.legL.rotation.x) * Math.min(1, dt * 14);
-    c.legR.rotation.x += (-1.1 - c.legR.rotation.x) * Math.min(1, dt * 14);
+    c.legR.rotation.x += (-1.1  - c.legR.rotation.x) * Math.min(1, dt * 14);
+    c.legL.position.y = 0.9; c.legR.position.y = 0.9;
     c.armL.rotation.x += (0.7 - c.armL.rotation.x) * Math.min(1, dt * 14);
     c.armR.rotation.x += (0.7 - c.armR.rotation.x) * Math.min(1, dt * 14);
   } else {
-    const targetAmp = spd > 0.7 ? Math.min(0.65, spd * 0.1) : 0;
+    // Running / idle animation
+    const running = spd > 0.6;
+    const targetAmp = running ? Math.min(0.95, spd * 0.14) : 0;
     c.amp += (targetAmp - c.amp) * Math.min(1, dt * 10);
-    if (spd > 0.7) c.walkPhase += Math.min(spd, 8.5) * dt * 1.7;
+    if (running) c.walkPhase += Math.min(spd, 12) * dt * 2.6;
+
     const sw = Math.sin(c.walkPhase) * c.amp;
-    c.legL.rotation.x = sw; c.legR.rotation.x = -sw;
-    c.armL.rotation.x = -sw * 0.7; c.armR.rotation.x = sw * 0.7;
+
+    // Leg swing — forward leg also lifts (knee-lift effect)
+    c.legL.rotation.x = sw;
+    c.legR.rotation.x = -sw;
+    c.legL.position.y = 0.9 + Math.max(0, sw)  * 0.3;
+    c.legR.position.y = 0.9 + Math.max(0, -sw) * 0.3;
+
+    // Arm swing — opposite and slightly bigger than legs
+    c.armL.rotation.x = -sw * 0.95;
+    c.armR.rotation.x =  sw * 0.95;
+
+    // Body bounce: subtle up-down with each step
+    const bob = running ? Math.abs(Math.sin(c.walkPhase)) * c.amp * 0.25 : 0;
+
+    // Forward lean scales with speed (sprinting leans forward more)
+    const targetLean = running ? Math.min(0.24, spd * 0.032) : 0;
+    c.lean += (targetLean - c.lean) * Math.min(1, dt * 8);
+
+    c.mesh.rotation.x = c.tilt - c.lean;
+    c.mesh.position.y = bob;
   }
 }
 
@@ -1317,10 +1439,15 @@ function animate() {
   if (!inMatch) {
     if (pvChar) {
       pvTime += dt;
-      pvChar.group.rotation.y += dt * 0.9;
-      pvChar.group.position.y = Math.sin(pvTime * 2.2) * 0.07;
-      const sw = Math.sin(pvTime * 2.2) * 0.12;
-      pvChar.armL.rotation.x = sw; pvChar.armR.rotation.x = -sw;
+      pvChar.group.rotation.y += dt * 0.6;
+      const sw = Math.sin(pvTime * 5.5) * 0.82;
+      pvChar.legL.rotation.x = sw;
+      pvChar.legR.rotation.x = -sw;
+      pvChar.legL.position.y = 0.9 + Math.max(0, sw)  * 0.28;
+      pvChar.legR.position.y = 0.9 + Math.max(0, -sw) * 0.28;
+      pvChar.armL.rotation.x = -sw * 0.9;
+      pvChar.armR.rotation.x =  sw * 0.9;
+      pvChar.group.position.y = Math.abs(Math.sin(pvTime * 5.5)) * 0.18;
     }
     pvRenderer.render(pvScene, pvCam);
     return;
